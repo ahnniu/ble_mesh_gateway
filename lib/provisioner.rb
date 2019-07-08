@@ -37,10 +37,19 @@ class Provisioner
 
         line = @cmd.response_gets
 
+        if line =~ /No\sdefault\scontroller\savailable/
+          error_msg = "No default controller available"
+          puts "Error occurs: #{error_msg}"
+          $dbus_object_provisioner_server.Error(error_msg)
+          break
+        end
+
         line.scan(/Device\s+UUID:\s+([0-9A-Fa-f]{32})/) do |match|
           uuid = match.shift
           @devices_unprovisioned.push uuid
           # TODO: Notice that a new device is descovered, maybe a callback
+          puts "New device found"
+          $dbus_object_provisioner_server.UnprovisionedDeviceDiscovered(uuid, "")
         end
 
       end

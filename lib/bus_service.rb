@@ -7,10 +7,15 @@ class ProvisionerDbusObject < DBus::Object
 
     dbus_method :DiscoverUnprovisioned, "in period:i" do |period|
       puts "Start to scan unprovisioned devices for #{period}..."
-      # $prov.discover_unprovisioned(period)
+      $prov.discover_unprovisioned(period)
+    end
+
+    dbus_method :DeviceName, "in uuid, out name:s" do |uuid|
+      ["#{name}"]
     end
 
     dbus_signal :UnprovisionedDeviceDiscovered, "uuid:s, name:s"
+    dbus_signal :Error, "msg:s"
   end
 
 end
