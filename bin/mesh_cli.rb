@@ -14,8 +14,10 @@ server = TCPSocket.new("127.0.0.1", 4000)
 cmd = Command.new(server)
 $prov = Provisioner.new(cmd)
 
-$dbus_object_on_off_server = GenericOnOffServerDbusObject.new(GenericOnOffServerDbusObject::ObjectPath)
 $dbus_object_provisioner_server = ProvisionerDbusObject.new(ProvisionerDbusObject::ObjectPath)
+
+$dbus_object_on_off_server = GenericOnOffServerDbusObject.new(GenericOnOffServerDbusObject::ObjectPath)
+$dbus_object_on_off_client = GenericOnOffClientDbusObject.new(GenericOnOffClientDbusObject::ObjectPath)
 
 service.export($dbus_object_on_off_server)
 service.export($dbus_object_provisioner_server)
