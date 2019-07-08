@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
 
 require 'json'
-require 'group_address'
-require 'model'
-require 'generic_on_off'
+require "../lib/group_address"
+require '../lib/model'
+require '../lib/generic_on_off'
 
 class Provisioner
   attr_accessor :devices_unprovisioned
