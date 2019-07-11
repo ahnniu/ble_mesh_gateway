@@ -1,4 +1,5 @@
 require "dbus"
+require "json"
 
 class ProvisionerDbusObject < DBus::Object
   ObjectPath = "/org/embest/Provisioner"
@@ -24,8 +25,7 @@ class ProvisionerDbusObject < DBus::Object
     # @!method Provision(uuid)
     # Provision a new device that discovered recently
     # @param uuid [String] the device's uuid
-    # @return [String] an Array JSON String, Array[0] is the provisioned 
-    # unicast_address of the node device, Array[1] is the device info
+    # @return [String] a JSON string including the unicast_address and device_info
     dbus_method :Provision, "in uuid:s, out info:s" do |uuid|
       unicast_address = "0010"
       device_info = <<-EOF
@@ -52,8 +52,8 @@ class ProvisionerDbusObject < DBus::Object
           ]
         }
       EOF
-      response = {unicast_address: unicast_address, device_info: device_info }
-      [response.to_s]
+      response = { unicast_address: unicast_address, device_info: device_info }
+      [response.to_json]
     end
     
     # @!method Config(node_address)
