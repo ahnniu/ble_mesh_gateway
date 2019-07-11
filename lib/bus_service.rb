@@ -52,7 +52,8 @@ class ProvisionerDbusObject < DBus::Object
           ]
         }
       EOF
-      [unicast_address, device_info]
+      response = {unicast_address: unicast_address, device_info: device_info }
+      [response.to_s]
     end
     
     # @!method Config(node_address)
