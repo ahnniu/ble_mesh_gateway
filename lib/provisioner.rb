@@ -62,22 +62,119 @@ class Provisioner
 
   end
 
-  def app_key_add(index, name)
-    # @app_key[name.to_sym] = @app_keys.length + 1
-    # @app_keys.push app_key
-    app_key[:index] = index
-    app_key[:name] = name
-    app_key[:net_key_index] = 0
-    @app_keys.push app_key
+  def info_dev(uuid)
+    @cmd.new_command("info #{uuid}")
+    name = ""
+    loop do
+      line = @cmd.response_gets(2000)
+      break unless line
+      line.scan(/Name:\s([_A-Za-z0-9]+)/) do |match|
+        name = match.shift
+        break
+      end
+    end
+    @cmd.processed
+    name
   end
 
-  def get_app_key_index(name)
-      @app_key[name.to_sym]
+  def target(unicast_address)
+    request = "target %04x" % [unicast_address]
+    @cmd.new_command_without_response(request)
+    @cmd.processed
+  end
+
+  def appkey_add(index)
+    @cmd.new_command_without_response("appkey-add #{index}")
+    @cmd.processed
+  end
+
+  def bind(ele_idx, app_idx, mod_id)
+    request = "bind %d %d %4x" %[ele_idx, app_idx, mod_id]
+    @cmd.new_command_without_response(request)
+    @cmd.processed
   end
 
   def provision(uuid, ob_code)
+    @cmd.new_command("provision #{uuid}")
+    loop do
+      line = @cmd.response_gets(2000)
+      break unless line
 
-    0x0010
+      case line
+      when /(Could\snot\sfind\sdevice\sproxy)/
+        break
+      when /Enter\sNumeric\skey:/
+        next_step = true
+        break
+      end
+    end
+
+    @cmd.processed
+    return nil unless next_step
+
+    @cmd.new_command("%4d" % [ob_code])
+
+    loop do
+      line = @cmd.response_gets(2000)
+      break unless line
+
+      case line
+      when /Composition\sdata\sfor\snode\s([A-Fa-f0-9]{4})\{/
+        address = $1.to_i(16)
+        json_capturing = true
+        device_info = "{"
+      when /^\}$/
+        device_info += "}"
+        json_capturing = false
+        break
+      else
+        device_info += line if json_capturing
+      end
+    end
+
+    @cmd.processed
+    return nil unless address
+
+    response = { unicast_address: address, device_info: device_info }
+    [response.to_json]
+  end
+
+  def pub_set(ele_addr, pub_addr, app_idx, mod_id)
+    request = "pub-set %4x %4x %d %4x" % [ele_addr, pub_addr, app_idx, mod_id]
+    @cmd.new_command(request)
+    result = false
+    loop do
+      line = @cmd.response_gets(2000)
+      break unless line
+
+      case line
+      when /Node\s[A-Fa-f0-9]{4}\sPublication\sstatus\sSuccess/
+        result = true
+        break
+      end
+    end
+    @cmd.processed
+    result
+  end
+
+  def sub_add(ele_addr, sub_addr, mod_id)
+    request = "sub-add %4x %4x %4x" % [ele_addr, sub_addr, mod_id]
+    @cmd.new_command(request)
+
+    result = false
+    loop do
+      line = @cmd.response_gets(2000)
+      break unless line
+
+      case line
+      when /Node\s[A-Fa-f0-9]{4}\sSubscription\sstatus\sSuccess/
+        result = true;
+        break
+      end
+    end
+
+    @cmd.processed
+    result
   end
 
   def reload_mesh_info
