@@ -6,20 +6,15 @@ require '../lib/model'
 require '../lib/generic_on_off'
 
 class Provisioner
-  attr_accessor :devices_unprovisioned
-  attr_reader :app_key
+  attr_reader :address
 
   def initialize(command)
     @cmd = command
-    @devices_unprovisioned = []
-    # [{id: 1, name: "home"}]
-    @net_keys = []
-    # [{id: 1, name: "user", :net_id: 0}]
-    @app_keys = []
-    @busy = false
 
     @models = []
-    @unicast_address = 0
+    @address = 0
+
+    reload_mesh
   end
 
   def discover_unprovisioned(period)
@@ -36,25 +31,20 @@ class Provisioner
         end
 
         line = @cmd.response_gets
-
-        if line =~ /No\sdefault\scontroller\savailable/
+        case line
+        when /No\sdefault\scontroller\savailable/
           error_msg = "No default controller available"
-          puts "Error occurs: #{error_msg}"
-          $dbus_object_provisioner_server.Error(error_msg)
           break
-        end
-
-        line.scan(/Device\s+UUID:\s+([0-9A-Fa-f]{32})/) do |match|
-          uuid = match.shift
-          @devices_unprovisioned.push uuid
-          # TODO: Notice that a new device is descovered, maybe a callback
-          puts "New device found"
+        when /Device\s+UUID:\s+([0-9A-Fa-f]{32})/
+          # May have muti-devices been found
+          uuid = $1
           $dbus_object_provisioner_server.UnprovisionedDeviceDiscovered(uuid, "")
         end
 
       end
 
       @cmd.processed
+      $dbus_object_provisioner_server.Error(error_msg) if error_msg
 
       @cmd.new_command_without_response("discover_unprovisioned off")
       @cmd.processed
@@ -118,11 +108,12 @@ class Provisioner
       line = @cmd.response_gets(2000)
       break unless line
 
+      json_capturing = false
       case line
       when /Composition\sdata\sfor\snode\s([A-Fa-f0-9]{4})\{/
         address = $1.to_i(16)
         json_capturing = true
-        device_info = "{"
+        device_info = "{\n"
       when /^\}$/
         device_info += "}"
         json_capturing = false
@@ -135,8 +126,7 @@ class Provisioner
     @cmd.processed
     return nil unless address
 
-    response = { unicast_address: address, device_info: device_info }
-    [response.to_json]
+    { unicast_address: address, device_info: JSON.parse(device_info) }
   end
 
   def pub_set(ele_addr, pub_addr, app_idx, mod_id)
@@ -154,6 +144,11 @@ class Provisioner
       end
     end
     @cmd.processed
+
+    if result
+      model_pub_set(element_address, publish_address, model_id)
+    end
+
     result
   end
 
@@ -177,43 +172,31 @@ class Provisioner
     result
   end
 
-  def reload_mesh_info
+  def mesh_info
     @cmd.new_command("mesh-info")
-    json = ""
 
     json_begin = json_end = false
-
     loop do
       line = @cmd.response_gets(1000)
+      break unless line
+
       case line
       when /\{/
         json_begin = true
+        json = "{\n"
       when /\}/
         json_end = true
-      end
-
-      if json_begin && !json_end
-        json += line
-      else
+        json += "}"
         break
+      else
+        json += line if json_begin && !json_end
       end
     end
 
     @cmd.processed
-
+    return nil unless json_end
     JSON.parse(json)
   end
-
-  def pub_set(element_address, publish_address, app_key_index, model_id)
-
-    @cmd.new_command("pub set #{element_address} #{publish_address} #{app_key_index} #{model_id} ")
-    model_pub_set(element_address, publish_address, model_id)
-  end
-
-  def sub_add(element_address, subscribe_address, model_id)
-
-  end
-
 
 private
 
@@ -234,6 +217,29 @@ private
         @models.push model
       end
 
+    end
+  end
+
+  def reload_mesh
+    json = mesh_info
+    return unless json
+
+    provisioner_settings = json["provisioners"][0]
+    @address = provisioner_settings["unicastAddress"].to_i(16)
+
+    nodes = json["nodes"]
+    nodes.each do |node|
+      elements = node["configuration"]["elements"]
+      elements.each do |element|
+        ele_idx = element["elementIndex"]
+        ele_address = element["unicastAddress"]
+        modes = elements["models"]
+        modes.each do |model|
+          mod_id = model["modelId"].to_i(16)
+          publish_address = model["publish"]["address"].to_i(16)
+          model_pub_set(ele_address, publish_address, mod_id)
+        end
+      end
     end
   end
 
