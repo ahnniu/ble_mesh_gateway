@@ -198,6 +198,23 @@ class Provisioner
     JSON.parse(json)
   end
 
+  def process_message(msg)
+    source = msg["source"]
+    dest = msg["dest"]
+    opcode = msg["opcode"]
+    data = msg["data"]
+
+    model_id = Message.get_model_id(opcode)
+    return unless model_id
+
+    @models.each do |model|
+      if model.id == model_id
+        model.process_message(source, dest, opcode, data)
+        return
+      end
+    end
+  end
+
 private
 
   def model_pub_set(element_address, publish_address, model_id)

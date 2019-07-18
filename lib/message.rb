@@ -6,7 +6,11 @@ class Message
   ]
 
   def self.get_model_id(opcode)
+    @@MESSAGES.each do |item|
+      return item[:model_id] if item[:opcode] == opcode
+    end
 
+    nil
   end
 
 end

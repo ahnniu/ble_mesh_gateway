@@ -11,8 +11,14 @@ bus = DBus.system_bus
 service = bus.request_service("org.embest")
 
 server = TCPSocket.new("127.0.0.1", 4000)
+puts "Connected to meshctl socket server[:4000]"
+
 cmd = Command.new(server)
 $prov = Provisioner.new(cmd)
+
+cmd.on_captured_publication do |msg|
+  $prov.process_message(msg)
+end
 
 $dbus_object_provisioner_server = ProvisionerDbusObject.new(ProvisionerDbusObject::ObjectPath)
 

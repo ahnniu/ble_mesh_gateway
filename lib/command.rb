@@ -6,11 +6,16 @@ class Command
 
   def initialize(server)
     @server = server
+    @callback = nil
     @processing = false
     @request = []
     @response = []
     send
     listen
+  end
+
+  def on_captured_publication(&block)
+    @callback = block
   end
 
   def send
@@ -27,7 +32,13 @@ class Command
     t = Thread.new do
       loop do
         msg = @server.gets.chomp
-        @response.push(msg)
+        case msg
+        when /^\[PubCaptured\]:\s*(.*)$/
+          data = JSON.parse($1)
+          @callback.call(data) if @callback
+        else
+          @response.push(msg)
+        end
       end
     end
   end
