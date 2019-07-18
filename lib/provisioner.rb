@@ -220,9 +220,11 @@ private
     end
   end
 
+  public
+
   def reload_mesh
     json = mesh_info
-    return unless json
+    return nil unless json
 
     provisioner_settings = json["provisioners"][0]
     @address = provisioner_settings["unicastAddress"].to_i(16)
@@ -241,6 +243,8 @@ private
         end
       end
     end
+
+    json
   end
 
 end

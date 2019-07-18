@@ -19,47 +19,26 @@ class ProvisionerDbusObject < DBus::Object
     # @param uuid [String] the device's uuid
     # @return [String] the name of the device
     dbus_method :DeviceName, "in uuid:s, out name:s" do |uuid|
-      ["XiaoMi Smart Light"]
+      name = @prov.info_dev(uuid)
+      [name]
     end
 
     # @!method Provision(uuid)
     # Provision a new device that discovered recently
     # @param uuid [String] the device's uuid
+    # @param obcode [Integer] the device's obcode
     # @return [String] a JSON string including the unicast_address and device_info
-    dbus_method :Provision, "in uuid:s, out info:s" do |uuid|
-      unicast_address = "0010"
-      device_info = <<-EOF
-        {
-          "cid":"05f1",
-          "pid":"0000",
-          "vid":"0000",
-          "crpl":"000a",
-          "features":{
-            "relay":true,
-            "proxy":true,
-            "friend":false,
-            "lpn":false
-          },
-          "elements":[
-            {
-              "elementIndex":0,
-              "location":"0000",
-              "models":[
-                "0000",
-                "1000"
-              ]
-            }
-          ]
-        }
-      EOF
-      response = { unicast_address: unicast_address, device_info: device_info }
+    dbus_method :Provision, "in uuid:s, in obcode:i, out info:s" do |uuid, obcode|
+      response = $prov.provision(uuid, obcode)
+      response = { unicast_address: 0, device_info: ""} unless response
       [response.to_json]
     end
-    
+
     # @!method Config(node_address)
     # Start to config the new provisioned device
     # @param node_address [Integer] the unicast address(unsigned short) of the node device
     dbus_method :Config, "in node_address:u, out error:s" do |node_address|
+      $prov.target(node_address)
       [""]
     end
 
@@ -67,15 +46,17 @@ class ProvisionerDbusObject < DBus::Object
     # Get the SIG model name from an id
     # @param mod_id [Integer] the id(unsigned short) of a SIG model
     dbus_method :ModelName, "in mod_id:u, out name:s" do |mod_id|
-      ["GenericOnOffServer"]
+      name = Model.get_model_class_name(mod_id)
+      [name]
     end
-    
+
     # @!method AppKeyAdd(idx)
     # Add an app key to the configuring node
     # @param idx [Integer] the index of the app key, this should be always 1
     # @return error [String] the error message, void message indicate that their
     # is no error
     dbus_method :AppKeyAdd, "in idx:i, out error:s" do |idx|
+      $prov.appkey_add(idx)
       [""]
     end
 
@@ -87,13 +68,14 @@ class ProvisionerDbusObject < DBus::Object
     # @return error [String] the error message, void message indicate that their
     # is no error
     dbus_method :Bind, "in ele_idx:i, in app_idx:i, in mod_id:u, out error:s" do |ele_idx, app_idx, mod_id|
+      $prov.bind(ele_idx, app_idx, mod_id)
       [""]
     end
 
     # @!method PubSet(ele_addr, pub_addr, app_idx, mod_id)
     # Set publish. For example, An OnOff Server(usually a light) can publish its onoff status
     # to a group address, who watch/subscribe the group address can get its status periodly.
-    # An OnOff client(usually a switch) can publish a onoff command to a group address. 
+    # An OnOff client(usually a switch) can publish a onoff command to a group address.
     # other models who watch /subscribe the group address, can response the command to
     # turn on or off
     # @param ele_addr [Integer] the unicast address of the element
@@ -103,12 +85,18 @@ class ProvisionerDbusObject < DBus::Object
     # @return error [String] the error message, void message indicate that their
     # is no error
     dbus_method :PubSet, "in ele_addr:u, in pub_addr:u, in app_idx:i, in mod_id:u, out error:s" do |ele_addr, pub_addr, app_idx, mod_id|
-      [""]
+      result = $prov.pub_set(ele_addr, pub_addr, app_idx, mod_id)
+      if result
+        error_msg = ""
+      else
+        error_msg = "Failed"
+      end
+      [error_msg]
     end
 
     # @!method SubAdd(ele_addr, sub_addr, mod_id)
-    # Set subscibe. For example, An OnOff server(usually a light) can subscribe 2 group 
-    # address(switch, one is the switch to control the light only, the other is the switch 
+    # Set subscibe. For example, An OnOff server(usually a light) can subscribe 2 group
+    # address(switch, one is the switch to control the light only, the other is the switch
     # to control all the lights in the living room).
     # Usually, a client model do not need to set subscribe.
     # @param ele_addr [Integer] the unicast address of the element
@@ -117,7 +105,13 @@ class ProvisionerDbusObject < DBus::Object
     # @return error [String] the error message, void message indicate that their
     # is no error
     dbus_method :SubAdd, "in ele_addr:u, in sub_addr:u, in mod_id:u, out error:s" do |ele_addr, sub_addr, mod_id|
-      [""]
+      result = $prov.sub_add(ele_addr, sub_addr, mod_id)
+      if result
+        error_msg = ""
+      else
+        error_msg = "Failed"
+      end
+      [error_msg]
     end
 
     # @!method MeshInfo
@@ -125,105 +119,12 @@ class ProvisionerDbusObject < DBus::Object
     # restart, it should reload the mesh network data again to sync.
     # @return info [String] a JSON string of the mesh data, others maybe the error message
     dbus_method :MeshInfo, "out info:s" do
-      response = <<-EOF
-        {
-          "$schema":"file:\/\/\/BlueZ\/Mesh\/schema\/mesh.jsonschema",
-          "meshName":"BT Mesh",
-          "netKeys":[
-            {
-              "index":0,
-              "keyRefresh":0,
-              "key":"18eed9c2a56add85049ffc3c59ad0e12"
-            }
-          ],
-          "appKeys":[
-            {
-              "index":0,
-              "boundNetKey":0,
-              "key":"4f68ad85d9f48ac8589df665b6b49b8a"
-            },
-            {
-              "index":1,
-              "boundNetKey":0,
-              "key":"2aa2a6ded5a0798ceab5787ca3ae39fc"
-            }
-          ],
-          "provisioners":[
-            {
-              "provisionerName":"BT Mesh Provisioner",
-              "unicastAddress":"0077",
-              "allocatedUnicastRange":[
-                {
-                  "lowAddress":"0100",
-                  "highAddress":"7fff"
-                }
-              ]
-            }
-          ],
-          "nodes":[
-            {
-              "deviceKey":"37fef1f4ce72e6028c29dae98a1c721e",
-              "configuration":{
-                "netKeys":[
-                  "0000"
-                ],
-                "elements":[
-                  {
-                    "elementIndex":0,
-                    "unicastAddress":"0100",
-                    "models":[
-                      {
-                        "modelId":"1000",
-                        "publish":{
-                          "address":"0c00",
-                          "index":"0001",
-                          "ttl":255
-                        },
-                        "bind":[
-                          1
-                        ],
-                        "subscribe":[
-                          "ceef"
-                        ]
-                      }
-                    ]
-                  }
-                ],
-                "appKeys":[
-                  "0001"
-                ]
-              },
-              "composition":{
-                "cid":"05f1",
-                "pid":"0000",
-                "vid":"0000",
-                "crpl":"000a",
-                "features":{
-                  "relay":true,
-                  "proxy":true,
-                  "friend":false,
-                  "lpn":false
-                },
-                "elements":[
-                  {
-                    "elementIndex":0,
-                    "location":"0000",
-                    "models":[
-                      "0000",
-                      "1000"
-                    ]
-                  }
-                ]
-              },
-              "IVindex":5,
-              "sequenceNumber":11
-            }
-          ],
-          "IVindex":5,
-          "IVupdate":0
-        }
-      EOF
-
+      mesh_info = $prov.reload_mesh
+      if mesh_info
+        response = mesh_info.to_json
+      else
+        response = ""
+      end
       [response]
     end
 
