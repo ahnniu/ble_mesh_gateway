@@ -126,9 +126,9 @@ class Provisioner
         line.scan(/\}/) do |match|
           right_bracket += 1
         end
-        break if right_bracket > 0 && right_bracket == left_bracket
       end
       device_info += line if left_bracket > 1
+      break if right_bracket > 0 && right_bracket == left_bracket
     end
 
     @cmd.processed
@@ -184,10 +184,22 @@ class Provisioner
     @cmd.new_command("mesh-info")
 
     json = ""
+    left_bracket = right_bracket = 0
     loop do
       line = @cmd.response_gets(2000)
       break unless line
+      case line
+      when /[\{\}]/
+        line.scan(/\{/) do |match|
+          left_bracket += 1
+        end
+
+        line.scan(/\}/) do |match|
+          right_bracket += 1
+        end
+      end
       json += line
+      break if right_bracket > 0 && right_bracket == left_bracket
     end
 
     @cmd.processed
