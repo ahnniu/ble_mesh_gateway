@@ -9,7 +9,11 @@ class GenericOnOffServer < Model
   end
 
   def process_message(source, dest, opcode, data)
-
+    case opcode
+    when 0x8204
+      state = data[0] == 0 ? false : true
+      $dbus_object_on_off_server.Publish(dest, state)
+    end
   end
 
   def pub_set(element_address, address)

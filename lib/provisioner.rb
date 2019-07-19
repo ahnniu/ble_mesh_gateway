@@ -199,6 +199,8 @@ class Provisioner
   end
 
   def process_message(msg)
+    # a json example: {"source":256,"dest":3090,"opcode":33284,"data":[18,35,52]}
+    # to hash object: {source: 0x0100, dest: 0x0c12, opcode: 0x8204, data: [0x12, 0x23, 0x34]}
     source = msg["source"]
     dest = msg["dest"]
     opcode = msg["opcode"]
