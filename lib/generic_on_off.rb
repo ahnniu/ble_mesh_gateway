@@ -2,6 +2,8 @@ class GenericOnOffServer < Model
   def initialize()
 
     @elements = []
+    # Transaction Identifier
+    @tid = 0
   end
 
   def id
@@ -53,13 +55,25 @@ class GenericOnOffClient < Model
     @elements.push element
   end
 
-  def on(address)
+  def set(dest, new_state)
+    opcode = Message::GenericOnOffSet
+    @tid += 1
+    data = [new_state, @tid ^ 256]
+    publish(dest, opcode, data)
+  end
 
+  def get_request(dest)
+    opcode = Message::GenericOnOffGet
+    data = []
+    publish(dest, opcode, data)
+  end
+
+  def on(address)
+    set(address, 1)
   end
 
   def off(address)
-
+    set(address, 0)
   end
-
 
 end

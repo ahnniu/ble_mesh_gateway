@@ -4,12 +4,20 @@ class Model
     { id: 0x1001, name: "GenericOnOffClient" }
   ]
 
+  def initialize(provisoner)
+    @prov = provisoner
+  end
+
   def id
     0
   end
 
   def process_message(source, dest, opcode, data)
 
+  end
+
+  def publish(dest, opcode, data)
+    @prov.generate_message(dest, opcode, data)
   end
 
   def sub_add(address)

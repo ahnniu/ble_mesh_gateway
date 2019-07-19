@@ -6,12 +6,15 @@ require '../lib/model'
 require '../lib/generic_on_off'
 
 class Provisioner
-  attr_reader :address
 
   def initialize(command)
     @cmd = command
 
     @models = []
+
+    # Provisoner's unicast address, this will be used for generate message
+    # and send a message to mesh network
+    # It will be load by exec the reload_mesh method
     @address = 0
 
     reload_mesh
@@ -38,6 +41,7 @@ class Provisioner
         when /Device\s+UUID:\s+([0-9A-Fa-f]{32})/
           # May have muti-devices been found
           uuid = $1
+          puts "A new device sanced: #{uuid}"
           $dbus_object_provisioner_server.UnprovisionedDeviceDiscovered(uuid, "")
         end
 
@@ -108,25 +112,29 @@ class Provisioner
       line = @cmd.response_gets(2000)
       break unless line
 
-      json_capturing = false
+      left_bracket = right_bracket = 0
       case line
       when /Composition\sdata\sfor\snode\s([A-Fa-f0-9]{4})\{/
-        address = $1.to_i(16)
-        json_capturing = true
+        addr = $1.to_i(16)
         device_info = "{\n"
-      when /^\}$/
-        device_info += "}"
-        json_capturing = false
-        break
-      else
-        device_info += line if json_capturing
+        left_bracket = 1
+      when /[\{\}]/
+        line.scan(/\{/) do |match|
+          left_bracket += 1
+        end
+
+        line.scan(/\}/) do |match|
+          right_bracket += 1
+        end
+        break if right_bracket > 0 && right_bracket == left_bracket
       end
+      device_info += line if left_bracket > 1
     end
 
     @cmd.processed
-    return nil unless address
+    return nil unless addr
 
-    { unicast_address: address, device_info: JSON.parse(device_info) }
+    { unicast_address: addr, device_info: JSON.parse(device_info) }
   end
 
   def pub_set(ele_addr, pub_addr, app_idx, mod_id)
@@ -175,26 +183,14 @@ class Provisioner
   def mesh_info
     @cmd.new_command("mesh-info")
 
-    json_begin = json_end = false
+    json = ""
     loop do
-      line = @cmd.response_gets(1000)
+      line = @cmd.response_gets(2000)
       break unless line
-
-      case line
-      when /\{/
-        json_begin = true
-        json = "{\n"
-      when /\}/
-        json_end = true
-        json += "}"
-        break
-      else
-        json += line if json_begin && !json_end
-      end
+      json += line
     end
 
     @cmd.processed
-    return nil unless json_end
     JSON.parse(json)
   end
 
@@ -217,6 +213,13 @@ class Provisioner
     end
   end
 
+  def generate_message(dest, opcode, data)
+    msg = { source: @address, dest: dest, opcode: opcode, data: data }
+    @cmd.new_command("gateway-publish #{msg.to_json}")
+    @cmd.processed
+  end
+
+
 private
 
   def model_pub_set(element_address, publish_address, model_id)
@@ -231,7 +234,7 @@ private
     if name
       model_class = Object.const_get(name)
       if model_class
-        model = model_class.new
+        model = model_class.new(self)
         model.pub_set(element_address, publish_address)
         @models.push model
       end
@@ -249,6 +252,7 @@ private
     @address = provisioner_settings["unicastAddress"].to_i(16)
 
     nodes = json["nodes"]
+    return json unless nodes
     nodes.each do |node|
       elements = node["configuration"]["elements"]
       elements.each do |element|
