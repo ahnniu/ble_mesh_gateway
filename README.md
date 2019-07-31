@@ -1,3 +1,16 @@
-# Bluetooth Mesh Gateway
+# meshctld-sdk
 
-A Bluetooth mesh gateway based on Mesh Proxy Service running on Raspberry Pi 3.
+SDK of meshctld - A Bluetooth mesh gateway daemon based on meshctl of bluez@5.50
+
+## Introduction
+
+This SDK acts as an interface of [meshctld](https://github.com/ahnniu/meshctld) and provide D-Bus API interface to application software.
+
+### Features
+
+TBD
+
+## How to
+
+TBD
+
